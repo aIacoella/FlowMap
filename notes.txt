@@ -1,0 +1,85 @@
+    let topLeft = [
+      this.x - this.hW - this.selectMargin - this.selectSquare / 2,
+      this.x - this.hW - this.selectMargin + this.selectSquare / 2,
+      this.y - this.hH - this.selectMargin - this.selectSquare / 2,
+      this.y - this.hH - this.selectMargin + this.selectSquare / 2
+    ];
+
+    let topRight = [
+      this.x + this.hW + this.selectMargin - this.selectSquare / 2,
+      this.x + this.hW + this.selectMargin + this.selectSquare / 2,
+      this.y - this.hH - this.selectMargin - this.selectSquare / 2,
+      this.y - this.hH - this.selectMargin + this.selectSquare / 2
+    ];
+
+    let bottomLeft = [
+      this.x + this.hW + this.selectMargin - this.selectSquare / 2,
+      this.x + this.hW + this.selectMargin + this.selectSquare / 2,
+      this.y + this.hH + this.selectMargin - this.selectSquare / 2,
+      this.y + this.hH + this.selectMargin + this.selectSquare / 2
+    ];
+
+    let bottomRigth = [
+      this.x - this.hW - this.selectMargin - this.selectSquare / 2,
+      this.x - this.hW - this.selectMargin + this.selectSquare / 2,
+      this.y + this.hH + this.selectMargin - this.selectSquare / 2,
+      this.y + this.hH + this.selectMargin + this.selectSquare / 2
+    ];
+
+
+DRAW SELECTION SQUARES
+
+this.ctx.beginPath();
+    this.ctx.clearRect(
+      this.x - this.hW - this.selectMargin - this.selectSquare / 2,
+      this.y - this.hH - this.selectMargin - this.selectSquare / 2,
+      this.selectSquare,
+      this.selectSquare
+    );
+    this.ctx.rect(
+      this.x - this.hW - this.selectMargin - this.selectSquare / 2,
+      this.y - this.hH - this.selectMargin - this.selectSquare / 2,
+      this.selectSquare,
+      this.selectSquare
+    );
+
+    this.ctx.clearRect(
+      this.x + this.hW + this.selectMargin - this.selectSquare / 2,
+      this.y - this.hH - this.selectMargin - this.selectSquare / 2,
+      this.selectSquare,
+      this.selectSquare
+    );
+    this.ctx.rect(
+      this.x + this.hW + this.selectMargin - this.selectSquare / 2,
+      this.y - this.hH - this.selectMargin - this.selectSquare / 2,
+      this.selectSquare,
+      this.selectSquare
+    );
+
+    this.ctx.clearRect(
+      this.x + this.hW + this.selectMargin - this.selectSquare / 2,
+      this.y + this.hH + this.selectMargin - this.selectSquare / 2,
+      this.selectSquare,
+      this.selectSquare
+    );
+    this.ctx.rect(
+      this.x + this.hW + this.selectMargin - this.selectSquare / 2,
+      this.y + this.hH + this.selectMargin - this.selectSquare / 2,
+      this.selectSquare,
+      this.selectSquare
+    );
+
+    this.ctx.clearRect(
+      this.x - this.hW - this.selectMargin - this.selectSquare / 2,
+      this.y + this.hH + this.selectMargin - this.selectSquare / 2,
+      this.selectSquare,
+      this.selectSquare
+    );
+    this.ctx.rect(
+      this.x - this.hW - this.selectMargin - this.selectSquare / 2,
+      this.y + this.hH + this.selectMargin - this.selectSquare / 2,
+      this.selectSquare,
+      this.selectSquare
+    );
+    this.ctx.stroke();
+    this.ctx.closePath();
