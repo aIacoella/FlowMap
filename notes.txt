@@ -83,3 +83,27 @@ this.ctx.beginPath();
     );
     this.ctx.stroke();
     this.ctx.closePath();
+
+
+    /*else if (this.nodeFocus === "DRAG") {
+      let newX1 = this.x1 + dx;
+      let newY1 = this.y1 + dy;
+
+      let newX2 = this.x2 + dx;
+      let newY2 = this.y2 + dy;
+
+      newX1 = Math.round(newX1 / map.grid) * map.grid;
+      newY1 = Math.round(newY1 / map.grid) * map.grid;
+
+      newX2 = Math.round(newX2 / map.grid) * map.grid;
+      newY2 = Math.round(newY2 / map.grid) * map.grid;
+
+      this.x1 = newX1;
+      this.y1 = newY1;
+
+      this.x2 = newX2;
+      this.y2 = newY2;
+
+      map.startX += Math.round(dx / map.grid) * map.grid;
+      map.startY += Math.round(dy / map.grid) * map.grid;
+    }*/

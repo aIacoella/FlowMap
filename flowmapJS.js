@@ -1,15 +1,13 @@
 window.onload = function() {
-  var item1 = new GeneralObject(map.ctx, 60, 60, 100, 40);
-  var item2 = new GeneralObject(map.ctx, 200, 200, 100, 40);
+  var rect1 = new Rectangle(map.ctx, 50, 50, 80, 40);
+  var rect2 = new Rectangle(map.ctx, 250, 50, 80, 40);
 
   var ellipse = new Ellipse(map.ctx, 400, 400, 80, 40);
 
   var ellipse2 = new Ellipse(map.ctx, 300, 400, 80, 40);
   var ellipse3 = new Ellipse(map.ctx, 400, 600, 80, 40);
 
-  map.addObject(item1);
-  map.addObject(item2);
-  map.addObject([ellipse, ellipse2, ellipse3]);
+  map.addObject([ellipse, ellipse2, ellipse3, rect1, rect2]);
 
   map.draw();
 };
@@ -35,7 +33,9 @@ class FlowMap {
     this.startX;
     this.startY;
 
-    this.objects = [];
+    this.allObjects = [];
+    this.connections = [];
+    this.generalObjects = [];
 
     this.canvas.onmousedown = mouseDown;
     this.canvas.onmouseup = mouseUp;
@@ -43,17 +43,25 @@ class FlowMap {
 
     this.focusedConn = undefined;
 
-    this.grid = 20;
+    this.grid = 1;
     this.focusedObj = undefined;
     this.hoveredObj = undefined;
   }
 
   draw() {
     this.clear();
-    for (let i = 0; i < this.objects.length; i++) {
-      let item = this.objects[i];
-      item === this.focusedObj ? item.draw(true) : item.draw(false);
+    for (let i = 0; i < this.connections.length; i++) {
+      let item = this.connections[i];
+      if (item === this.focusedObj) continue;
+      item.draw(false);
     }
+    for (let i = 0; i < this.generalObjects.length; i++) {
+      let item = this.generalObjects[i];
+      if (item === this.focusedObj) continue;
+      item.draw(false);
+    }
+
+    this.focusedObj.draw(true);
   }
 
   clear() {
@@ -75,33 +83,40 @@ class FlowMap {
   addObject(obj) {
     if (Array.isArray(obj)) {
       for (let i = 0; i < obj.length; i++) {
-        this.objects.push(obj[i]);
+        this.allObjects.push(obj[i]);
+        if (obj[i] instanceof Connection) this.connections.push(obj[i]);
+        else this.generalObjects.push(obj[i]);
       }
     } else {
-      this.objects.push(obj);
+      console.log("Adding: " + obj);
+      this.allObjects.push(obj);
+      if (obj instanceof Connection) this.connections.push(obj);
+      else this.generalObjects.push(obj);
     }
   }
 
   isHovering(mx, my) {
-    if (this.hoveredObj !== undefined && !this.hoveredObj.isClicking(mx, my)) {
-      this.hoveredObj.dismissHovering();
+    let overNull =
+      this.hoveredObj !== undefined && !this.hoveredObj.isClicking(mx, my);
+    if (overNull) {
+      this.hoveredObj.hovered = false;
       this.hoveredObj = undefined;
     } else {
-      for (let i = 0; i < this.objects.length; i++) {
-        let item = this.objects[i];
+      for (let i = 0; i < this.allObjects.length; i++) {
+        let item = this.allObjects[i];
         if (item instanceof Connection) break;
         if (item.isClicking(mx, my)) {
           if (this.hoveredObj !== item) {
-            if (this.hoveredObj !== undefined)
-              this.hoveredObj.dismissHovering();
+            if (this.hoveredObj !== undefined) this.hoveredObj.hovered = false;
             this.hoveredObj = item;
-            item.onHover();
+            item.hovered = true;
             return item;
           }
         }
       }
     }
-    return null;
+    if (overNull) return null;
+    return this.hoveredObj;
   }
 }
 
@@ -120,11 +135,20 @@ function mouseDown(e) {
 
   //-----------RESIZING-----------------
   let isRes = -1;
-  if (map.focusedObj !== undefined && map.focusedObj instanceof GeneralObject) {
+  if (map.focusedObj !== undefined) {
     isRes = map.focusedObj.isResizing(mx, my);
   }
   if (isRes != -1) {
-    map.eventStatus = isRes + 2; //---------END-RESIZING---------------
+    if (map.focusedObj instanceof GeneralObject) map.eventStatus = isRes + 2;
+    else {
+      map.eventStatus = 10;
+      map.focusedConn = map.focusedObj;
+      /*isRes === 1
+        ? (map.focusedConn.nodeFocus = "P1")
+        : (map.focusedConn.nodeFocus = "P2");
+      map.focusedConn.move(0, 0, mx, my); */
+    }
+    //---------END-RESIZING---------------
   } else if (
     map.focusedObj !== undefined &&
     map.focusedObj instanceof GeneralObject &&
@@ -144,15 +168,17 @@ function mouseDown(e) {
   } else {
     //--------END-CONNECTING--------------
     let focused = false;
-    for (let i = 0; i < map.objects.length; i++) {
-      let item = map.objects[i];
+    let orderedObjs = map.generalObjects.concat(map.connections);
+    for (let i = 0; i < orderedObjs.length; i++) {
+      let item = orderedObjs[i];
       if (item.isClicking(mx, my)) {
         // if yes, set that rects isDragging=true
+        console.log(i);
         map.eventStatus = 1;
-        //item.isDragging = true;
         map.focusedObj = item;
         focused = true;
         map.draw();
+        break;
       }
     }
     if (!focused) {
@@ -170,13 +196,10 @@ function mouseUp(e) {
   e.stopPropagation();
 
   if (map.eventStatus === 10) {
-    if (map.focusedConn.possibleConnection !== undefined) {
-      map.focusedConn.connect();
-    }
+    map.focusedConn.connect();
     if (map.hoveredObj !== undefined) {
-      map.hoveredObj.dismissHovering();
+      map.hoveredObj.hovered = false;
     }
-    map.focusedConn.possibleConnection = undefined;
     map.focusedConn = undefined;
 
     map.draw();
@@ -232,7 +255,15 @@ function mouseMove(e) {
     let dx = mx - map.startX;
     let dy = my - map.startY;
 
+    let oldConnection = map.focusedConn.possibleConnection;
     map.focusedConn.move(dx, dy, mx, my);
+
+    if (
+      oldConnection !== undefined &&
+      oldConnection !== map.focusedConn.possibleConnection
+    ) {
+      oldConnection.removeConnection(map.focusedConn);
+    }
   }
 }
 
@@ -385,39 +416,42 @@ class GeneralObject {
   }
 
   draw(selected) {
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.x - this.hW, this.y - this.hH);
-    this.ctx.lineTo(this.x + this.hW, this.y - this.hH);
-    this.ctx.lineTo(this.x + this.hW, this.y + this.hH);
-    this.ctx.lineTo(this.x - this.hW, this.y + this.hH);
-    this.ctx.lineTo(this.x - this.hW, this.y - this.hH);
-    this.ctx.strokeStyle = this.borderColor;
-    this.ctx.stroke();
-    this.ctx.closePath();
-
     this.write();
 
     selected ? this.onSelect() : null;
 
     if (this.hovered) {
-      this.ctx.beginPath();
-      this.ctx.strokeStyle = "orange";
-      this.ctx.rect(
-        this.x - this.hW - this.selectMargin,
-        this.y - this.hH - this.selectMargin,
-        this.width + this.selectMargin * 2,
-        this.height + this.selectMargin * 2
-      );
-      this.ctx.stroke();
-      this.ctx.closePath();
+      this.onHover();
     }
   }
 
-  addConnection(line, isFrom) {
-    if (isFrom) line.connectionFrom = this;
-    else line.connectionTo = this;
+  onHover() {
+    this.ctx.beginPath();
+    this.ctx.strokeStyle = "orange";
+    this.ctx.rect(
+      this.x - this.hW - this.selectMargin,
+      this.y - this.hH - this.selectMargin,
+      this.width + this.selectMargin * 2,
+      this.height + this.selectMargin * 2
+    );
+    this.ctx.stroke();
+    this.ctx.closePath();
+  }
+
+  addConnection(line) {
+    line.connectionFrom = this;
     this.connections.push(line);
     map.addObject(line);
+  }
+
+  removeConnection(line) {
+    for (let i = 0; i < this.connections.length; i++) {
+      if (line === this.connections[i]) {
+        this.connections.splice(i, 1);
+        return true;
+      }
+    }
+    return false;
   }
 
   drawConnectionSnippet() {
@@ -566,14 +600,6 @@ class GeneralObject {
     this.ctx.stroke();
     this.ctx.closePath();
   }
-
-  onHover() {
-    this.hovered = true;
-  }
-
-  dismissHovering() {
-    this.hovered = false;
-  }
 }
 
 class Ellipse extends GeneralObject {
@@ -583,21 +609,63 @@ class Ellipse extends GeneralObject {
 
   draw(selected) {
     this.ctx.beginPath();
+    this.ctx.globalCompositeOperation = "destination-out";
+    this.ctx.ellipse(this.x, this.y, this.hW, this.hH, 0, 0, 2 * Math.PI);
+    this.ctx.fill();
+    this.ctx.closePath();
+    this.ctx.globalCompositeOperation = "source-over";
+
+    this.ctx.beginPath();
     this.ctx.ellipse(this.x, this.y, this.hW, this.hH, 0, 0, 2 * Math.PI);
     this.ctx.strokeStyle = "green";
     this.ctx.stroke();
-    super.write();
-    selected ? this.onSelect() : null;
+    this.ctx.closePath();
+
+    super.draw(selected);
+  }
+
+  isClicking(x, y) {
+    let result =
+      (x - this.x) ** 2 / this.hW ** 2 + (y - this.y) ** 2 / this.hH ** 2;
+    return result < 1;
+  }
+}
+
+class Rectangle extends GeneralObject {
+  constructor(ctx, x, y, width, height) {
+    super(ctx, x, y, width, height);
+  }
+
+  draw(selected) {
+    this.ctx.clearRect(
+      this.x - this.hW,
+      this.y - this.hH,
+      this.width,
+      this.height
+    );
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.x - this.hW, this.y - this.hH);
+    this.ctx.lineTo(this.x + this.hW, this.y - this.hH);
+    this.ctx.lineTo(this.x + this.hW, this.y + this.hH);
+    this.ctx.lineTo(this.x - this.hW, this.y + this.hH);
+    this.ctx.lineTo(this.x - this.hW, this.y - this.hH);
+    this.ctx.strokeStyle = this.borderColor;
+    this.ctx.stroke();
+    this.ctx.closePath();
+    super.draw(selected);
   }
 }
 
 class Connection {
   constructor(ctx, x1, y1, x2, y2) {
     this.ctx = ctx;
-    this.x1 = x1;
-    this.y1 = y1;
-    this.x2 = x2;
-    this.y2 = y2;
+    this.xp1 = x1;
+    this.yp1 = y1;
+    this.xp2 = x2;
+    this.yp2 = y2;
+
+    this.radius = 10;
 
     this.selectMargin = 4;
     this.selectSquare = 8;
@@ -609,6 +677,39 @@ class Connection {
 
     this.nodeFocus = "P2";
     this.updateSlope();
+  }
+
+  set x1(x) {
+    this.xp1 = x;
+    this.updateSlope();
+  }
+
+  set x2(x) {
+    this.xp2 = x;
+    this.updateSlope();
+  }
+
+  set y1(y) {
+    this.yp1 = y;
+    this.updateSlope();
+  }
+
+  set y2(y) {
+    this.yp2 = y;
+    this.updateSlope();
+  }
+
+  get x1() {
+    return this.xp1;
+  }
+  get x2() {
+    return this.xp2;
+  }
+  get y1() {
+    return this.yp1;
+  }
+  get y2() {
+    return this.yp2;
   }
 
   move(dx, dy, mx, my) {
@@ -637,33 +738,13 @@ class Connection {
       let item = map.isHovering(mx, my);
       if (item !== null && this.connectionTo !== item) {
         this.possibleConnection = item;
+      } else {
+        this.possibleConnection = undefined;
       }
 
       map.startX = newX;
       map.startY = newY;
     }
-    /*else if (this.nodeFocus === "DRAG") {
-      let newX1 = this.x1 + dx;
-      let newY1 = this.y1 + dy;
-
-      let newX2 = this.x2 + dx;
-      let newY2 = this.y2 + dy;
-
-      newX1 = Math.round(newX1 / map.grid) * map.grid;
-      newY1 = Math.round(newY1 / map.grid) * map.grid;
-
-      newX2 = Math.round(newX2 / map.grid) * map.grid;
-      newY2 = Math.round(newY2 / map.grid) * map.grid;
-
-      this.x1 = newX1;
-      this.y1 = newY1;
-
-      this.x2 = newX2;
-      this.y2 = newY2;
-
-      map.startX += Math.round(dx / map.grid) * map.grid;
-      map.startY += Math.round(dy / map.grid) * map.grid;
-    }*/
 
     map.draw();
 
@@ -671,7 +752,13 @@ class Connection {
   }
 
   connect() {
-    this.possibleConnection.addConnection(this, false);
+    if (this.possibleConnection === undefined) return;
+    if (this.connectionTo === undefined)
+      this.connectionTo = this.possibleConnection;
+    else if (this.connectionFrom === undefined)
+      this.connectionFrom = this.possibleConnection;
+
+    this.possibleConnection.connections.push(this);
   }
 
   updateSlope() {
@@ -693,38 +780,33 @@ class Connection {
     this.ctx.stroke();
     this.ctx.closePath();
 
-    this.ctx.beginPath();
-    this.ctx.ellipse(this.x1, this.y1, 5, 5, 0, 0, 2 * Math.PI);
-    this.ctx.fillStyle = "red";
-    this.ctx.fill();
+    if (
+      (map.focusedObj !== undefined || map.focusedConn !== undefined) &&
+      (map.focusedObj === this || map.focusedConn === this)
+    ) {
+      this.ctx.beginPath();
+      this.ctx.ellipse(this.x1, this.y1, 5, 5, 0, 0, 2 * Math.PI);
+      this.ctx.fillStyle = "red";
+      this.ctx.fill();
 
-    this.ctx.beginPath();
-    this.ctx.ellipse(this.x2, this.y2, 5, 5, 0, 0, 2 * Math.PI);
-    this.ctx.fillStyle = "green";
-    this.ctx.fill();
+      this.ctx.beginPath();
+      this.ctx.ellipse(this.x2, this.y2, 5, 5, 0, 0, 2 * Math.PI);
+      this.ctx.fillStyle = "green";
+      this.ctx.fill();
+    }
 
     this.ctx.closePath();
     selected ? this.onSelect() : null;
   }
 
   isClicking(x, y) {
-    let radius = 10;
     let occurrence = 10;
 
-    if (this.getDistance([this.x1, this.y1], [x, y]) < radius) {
-      this.nodeFocus = "P1";
-      return true;
-    }
-    if (this.getDistance([this.x2, this.y2], [x, y]) < radius) {
-      this.nodeFocus = "P2";
-      return true;
-    }
-    /*
     if (this.m === undefined) {
       let distance = this.getDistance([this.x1, this.y1], [this.x2, this.y2]);
       for (let i = 0; i < distance; i += occurrence) {
         let center = [this.x1, this.y1 + i * this.verticalStack];
-        if (this.getDistance(center, [x, y]) < radius) {
+        if (this.getDistance(center, [x, y]) < this.radius) {
           this.nodeFocus = "DRAG";
           return true;
         }
@@ -740,15 +822,27 @@ class Connection {
         let centerY = Math.round(this.y1 + this.m * i * sign);
         let center = [centerX, centerY];
 
-        if (this.getDistance(center, [x, y]) < radius) {
+        if (this.getDistance(center, [x, y]) < this.radius) {
           this.nodeFocus = "DRAG";
           return true;
         }
       }
     }
-    */
 
     return false;
+  }
+
+  isResizing(x, y) {
+    if (this.getDistance([this.x1, this.y1], [x, y]) < this.radius) {
+      this.nodeFocus = "P1";
+      return 1;
+    }
+    if (this.getDistance([this.x2, this.y2], [x, y]) < this.radius) {
+      this.nodeFocus = "P2";
+      return 2;
+    }
+
+    return -1;
   }
 
   onSelect() {
@@ -757,14 +851,6 @@ class Connection {
     this.ctx.rect(this.x1, this.y1, this.x2 - this.x1, this.y2 - this.y1);
     this.ctx.stroke();
     this.ctx.closePath();
-  }
-
-  onHover() {
-    this.hovered = true;
-  }
-
-  dismissHovering() {
-    this.hovered = false;
   }
 
   getDistance(p1, p2) {

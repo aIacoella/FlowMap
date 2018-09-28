@@ -4,5 +4,9 @@ body {
 
 canvas {
   background: white;
-  margin: auto;
+}
+
+.leftSideBar {
+  background: teal;
+  color: white;
 }
