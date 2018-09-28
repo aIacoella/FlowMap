@@ -50,48 +50,35 @@ class FlowMap {
 
   draw() {
     this.clear();
-    for (let i = 0; i < this.connections.length; i++) {
-      let item = this.connections[i];
+    let generalObjects = [];
+    for (let i = 0; i < this.allObjects.length; i++) {
+      let item = this.allObjects[i];
+      if (item instanceof GeneralObject) {
+        generalObjects.push(item);
+        continue;
+      }
       if (item === this.focusedObj) continue;
       item.draw(false);
     }
-    for (let i = 0; i < this.generalObjects.length; i++) {
-      let item = this.generalObjects[i];
+    for (let i = 0; i < generalObjects.length; i++) {
+      let item = generalObjects[i];
       if (item === this.focusedObj) continue;
       item.draw(false);
     }
-
-    this.focusedObj.draw(true);
+    if (this.focusedObj !== undefined) this.focusedObj.draw(true);
   }
 
   clear() {
     this.ctx.clearRect(0, 0, this.WIDTH, this.HEIGHT);
   }
 
-  drawBackground() {
-    this.ctx.beginPath();
-    this.ctx.fillStyle = "black";
-    for (let i = this.grid; i < this.WIDTH - this.grid; i += this.grid) {
-      for (let f = this.grid; f < this.HEIGHT - this.grid; f += this.grid) {
-        this.ctx.fillRect(i, f, 1, 1);
-      }
-    }
-    this.ctx.fill();
-    this.ctx.closePath();
-  }
-
   addObject(obj) {
     if (Array.isArray(obj)) {
       for (let i = 0; i < obj.length; i++) {
         this.allObjects.push(obj[i]);
-        if (obj[i] instanceof Connection) this.connections.push(obj[i]);
-        else this.generalObjects.push(obj[i]);
       }
     } else {
-      console.log("Adding: " + obj);
       this.allObjects.push(obj);
-      if (obj instanceof Connection) this.connections.push(obj);
-      else this.generalObjects.push(obj);
     }
   }
 
@@ -101,6 +88,7 @@ class FlowMap {
     if (overNull) {
       this.hoveredObj.hovered = false;
       this.hoveredObj = undefined;
+      return null;
     } else {
       for (let i = 0; i < this.allObjects.length; i++) {
         let item = this.allObjects[i];
@@ -115,7 +103,6 @@ class FlowMap {
         }
       }
     }
-    if (overNull) return null;
     return this.hoveredObj;
   }
 }
@@ -143,6 +130,8 @@ function mouseDown(e) {
     else {
       map.eventStatus = 10;
       map.focusedConn = map.focusedObj;
+      //console.log("connectionFrom: " + map.focusedConn.connectionFrom);
+      //console.log("connectionTo: " + map.focusedConn.connectionTo);
       /*isRes === 1
         ? (map.focusedConn.nodeFocus = "P1")
         : (map.focusedConn.nodeFocus = "P2");
@@ -163,22 +152,38 @@ function mouseDown(e) {
       mx,
       my
     );
-    map.focusedObj.addConnection(line, true);
+    line.connectionFrom = map.focusedObj;
+    map.addObject(line);
+    map.focusedObj.addConnection(line);
     map.focusedConn = line;
   } else {
     //--------END-CONNECTING--------------
     let focused = false;
-    let orderedObjs = map.generalObjects.concat(map.connections);
-    for (let i = 0; i < orderedObjs.length; i++) {
-      let item = orderedObjs[i];
+    let connections = [];
+    for (let i = 0; i < map.allObjects.length; i++) {
+      let item = map.allObjects[i];
+      if (item instanceof Connection) {
+        connections.push(item);
+        continue;
+      }
       if (item.isClicking(mx, my)) {
-        // if yes, set that rects isDragging=true
-        console.log(i);
         map.eventStatus = 1;
         map.focusedObj = item;
         focused = true;
         map.draw();
         break;
+      }
+    }
+    if (!focused) {
+      for (let i = 0; i < connections.length; i++) {
+        let item = connections[i];
+        if (item.isClicking(mx, my)) {
+          map.eventStatus = 1;
+          map.focusedObj = item;
+          focused = true;
+          map.draw();
+          break;
+        }
       }
     }
     if (!focused) {
@@ -195,13 +200,26 @@ function mouseUp(e) {
   e.preventDefault();
   e.stopPropagation();
 
+  const mx = parseInt(e.clientX - map.offsetX);
+  const my = parseInt(e.clientY - map.offsetY);
+
   if (map.eventStatus === 10) {
-    map.focusedConn.connect();
+    let componentConnection = map.focusedConn.connect(
+      mx,
+      my
+    );
+    //remove old Connection
+    if (componentConnection.oldConnection !== undefined) {
+      componentConnection.oldConnection.removeConnection(map.focusedConn);
+    }
+    //add new Connection
+    if (componentConnection.newConnection !== undefined) {
+      componentConnection.newConnection.addConnection(map.focusedConn);
+    }
     if (map.hoveredObj !== undefined) {
       map.hoveredObj.hovered = false;
     }
     map.focusedConn = undefined;
-
     map.draw();
   }
 
@@ -255,15 +273,7 @@ function mouseMove(e) {
     let dx = mx - map.startX;
     let dy = my - map.startY;
 
-    let oldConnection = map.focusedConn.possibleConnection;
     map.focusedConn.move(dx, dy, mx, my);
-
-    if (
-      oldConnection !== undefined &&
-      oldConnection !== map.focusedConn.possibleConnection
-    ) {
-      oldConnection.removeConnection(map.focusedConn);
-    }
   }
 }
 
@@ -438,10 +448,8 @@ class GeneralObject {
     this.ctx.closePath();
   }
 
-  addConnection(line) {
-    line.connectionFrom = this;
+  addConnection(line, pole) {
     this.connections.push(line);
-    map.addObject(line);
   }
 
   removeConnection(line) {
@@ -723,6 +731,14 @@ class Connection {
       this.x1 = newX;
       this.y1 = newY;
 
+      let item = map.isHovering(mx, my);
+      //console.log(item);
+      if (item !== null) {
+        this.possibleConnection = item;
+      } else {
+        this.possibleConnection = undefined;
+      }
+
       map.startX = newX;
       map.startY = newY;
     } else if (this.nodeFocus === "P2") {
@@ -751,14 +767,25 @@ class Connection {
     this.updateSlope();
   }
 
-  connect() {
-    if (this.possibleConnection === undefined) return;
-    if (this.connectionTo === undefined)
-      this.connectionTo = this.possibleConnection;
-    else if (this.connectionFrom === undefined)
+  //returning [newConnection, oldConnecton]
+  connect(mx, my) {
+    //this.possibleConnection = map.isHovering(mx, my);
+    console.log(this.possibleConnection);
+    if (this.nodeFocus === "P1") {
+      //connecting from
+      let oldConnection = this.connectionFrom;
+      //console.log("connection from: " + this.connectionFrom);
       this.connectionFrom = this.possibleConnection;
-
-    this.possibleConnection.connections.push(this);
+      return {
+        newConnection: this.connectionFrom,
+        oldConnection: oldConnection
+      };
+    } else {
+      //connecting to
+      let oldConnection = this.connectionTo;
+      this.connectionTo = this.possibleConnection;
+      return { newConnection: this.connectionTo, oldConnection: oldConnection };
+    }
   }
 
   updateSlope() {
@@ -791,7 +818,7 @@ class Connection {
 
       this.ctx.beginPath();
       this.ctx.ellipse(this.x2, this.y2, 5, 5, 0, 0, 2 * Math.PI);
-      this.ctx.fillStyle = "green";
+      this.ctx.fillStyle = "red";
       this.ctx.fill();
     }
 
