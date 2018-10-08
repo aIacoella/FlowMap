@@ -16,6 +16,8 @@
                 ondragend="createComponent(event)">
             <img class="sidebar-element" draggable="true" src="img/ellipse.svg" alt="ellipse" ondrag="closeNav()"
                 ondragend="createComponent(event)">
+            <img class="sidebar-element" draggable="true" src="img/romboid.svg" alt="romboid" ondrag="closeNav()"
+                ondragend="createComponent(event)">
         </div>
     </div>
 
@@ -36,16 +38,23 @@
                 </div>
                 <div id="proprieties-contnent">
                     <div class="proprieties-element-block">
-                        <label for="text">Text</label>
-                        <textarea name="text" id="text" rows="5" onchange="changeText()"></textarea>
+                        <label for="text">Text </label>
+                        <textarea name="text" id="text" rows="3" onchange="changeText()"></textarea>
+                    </div>
+                    <div class="proprieties-element-block">
+                        <label for="text">Font Size <span id="fsSpan"></span></label>
+                        <input type="range" min="8" max="28" class="slider" id="fsSlider" onchange="changeFontSize()">
+                    </div>
+                    <div id="attributes-element-block" class="proprieties-element-block">
+
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-
-    <script src="flowmapJS.js"></script>
+    <script src="js/flowmapJS.js"></script>
+    <script src="js/main.js"></script>
 </body>
 
 </html>

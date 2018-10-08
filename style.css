@@ -1,10 +1,14 @@
 body {
   margin: 0;
   font-family: "Lato", sans-serif;
-  background: #dddddd;
+  background: #eaeaea;
+  color: #111111;
 }
-canvas {
-  background: #ffffff;
+.canvas-container {
+  width: 800px;
+  border: 10px solid #ffffff;
+  background-image: url("img/backgroundpoint40.svg");
+  z-index: 1;
 }
 
 .container {
@@ -14,18 +18,16 @@ canvas {
   grid-template-columns: 30px auto;
   grid-template-rows: 760px 40px auto;
 }
-
 .addSideBar {
   height: 100%;
   width: 0;
   position: fixed;
-  z-index: 1;
+  z-index: 2;
   top: 0;
   left: 0;
   background-color: #001f3f;
   overflow-x: hidden;
 }
-
 .addSideBar a {
   padding: 8px 8px 8px 32px;
   text-decoration: none;
@@ -34,18 +36,15 @@ canvas {
   display: block;
   transition: 0.3s;
 }
-
 .addSideBar a:hover {
   color: #f1f1f1;
 }
-
 .addSideBar .closebtn {
   position: absolute;
   top: -15px;
   right: 5px;
   font-size: 36px;
 }
-
 .sideBarTitle {
   display: block;
   background-color: #ff4136;
@@ -54,25 +53,20 @@ canvas {
   padding: 10px 0 0 20px;
   font-size: 12;
 }
-
 .sidebar-element {
   margin: 8px;
 }
-
 .sidebar-element:hover {
   cursor: move;
 }
-
 .sidebar-element img {
   margin: 0;
 }
-
 .separator {
   width: 100%;
   height: 2px;
   background-color: #ff4136;
 }
-
 .element-container {
   grid-template-columns: 100px 100px;
 }
@@ -80,12 +74,10 @@ canvas {
   background-color: #dddddd;
   cursor: pointer;
 }
-
 .div-openers:hover {
   background-color: #ff4136;
   transition: 0.2s;
 }
-
 .proprieties-container {
   z-index: 1;
   grid-column: 2;
@@ -93,7 +85,6 @@ canvas {
   justify-self: end;
   align-self: end;
 }
-
 #proprieties-block {
   color: white;
   z-index: 2;
@@ -106,7 +97,6 @@ canvas {
   overflow-x: hidden;
   transition: 0.2s;
 }
-
 .prop-title-block {
   padding-top: 15px;
   height: 50px;
@@ -114,7 +104,6 @@ canvas {
   background-color: #ff4136;
   text-align: center;
 }
-
 .prop-title-block .closebtn {
   position: absolute;
   margin: 0;
@@ -122,11 +111,9 @@ canvas {
   left: 10px;
   top: 5px;
 }
-
 .prop-title-block h3 {
   margin: 0;
 }
-
 .prop-title-block a {
   text-decoration: none;
   font-size: 25px;
@@ -134,24 +121,88 @@ canvas {
   display: block;
   transition: 0.3s;
 }
-
 .prop-title-block a:hover {
   color: #f1f1f1;
 }
-
 .proprieties-element-block {
-  padding: 20px;
+  padding: 15px 20px 0px 20px;
 }
-
 .proprieties-element-block label {
   display: block;
-  font-size: 18px;
+  font-size: 16px;
   margin-bottom: 8px;
 }
-
 .proprieties-element-block textarea {
   display: block;
   resize: none;
   width: 100%;
   font-size: 16px;
+}
+.proprieties-element-block h4 {
+  display: block;
+  font-size: 16px;
+  margin: 8px 0 8px 0;
+  padding: 0;
+  font-weight: 100;
+}
+.attribute-name {
+  border: none;
+  background: none;
+  color: white;
+  font-size: 16px;
+  width: auto;
+}
+.attribute-name:focus {
+  outline: none;
+  border-bottom: solid 2px #ff4136;
+  transition: 0.2s;
+}
+.slider {
+  -webkit-appearance: none; /* Override default CSS styles */
+  appearance: none;
+  width: 100%; /* Full-width */
+  height: 6px; /* Specified height */
+  background: #d3d3d3; /* Grey background */
+  outline: none; /* Remove outline */
+  opacity: 0.7;
+  /* Set transparency (for mouse-over effects on hover) */
+  -webkit-transition: 0.2s; /* 0.2 seconds transition on hover */
+  transition: opacity 0.2s;
+}
+.slider:hover {
+  opacity: 1;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #ff4136;
+  cursor: pointer;
+}
+
+.accordion {
+  background-color: none;
+  color: white;
+  text-align: left;
+  transition: 0.4s;
+  margin: 6px 0;
+}
+
+.accordion img {
+  display: inline-block;
+  background: none;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  height: 10px;
+  margin-right: 10px;
+}
+
+/* Style the accordion panel. Note: hidden by default */
+.panel {
+  padding: 0 18px;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.2s ease-out;
 }

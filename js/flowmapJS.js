@@ -20,6 +20,7 @@ class FlowMap {
       1: moving;
       2 - 9: resizing;
       10: connection;
+      11: adding attributes;
     */
     this.startX;
     this.startY;
@@ -34,8 +35,9 @@ class FlowMap {
 
     this.focusedConn = undefined;
 
-    this.grid = 10;
+    this.grid = 20;
     this.focusObj = undefined;
+    this.focusAtt = undefined;
     this.hoveredObj = undefined;
   }
 
@@ -43,7 +45,6 @@ class FlowMap {
     if (focusedObj !== this.focusObj) {
       this.focusObj = focusedObj;
       if (this.focusObj !== undefined) {
-        console.log("show");
         showProprieties();
       } else {
         hideProprieties();
@@ -55,11 +56,24 @@ class FlowMap {
     return this.focusObj;
   }
 
+  set focusedAttribute(attribute) {
+    this.focusAtt = attribute;
+  }
+
+  get focusedAttribute() {
+    return this.focusAtt;
+  }
+
   draw() {
     this.clear();
     let generalObjects = [];
+    let attributes = [];
     for (let i = 0; i < this.allObjects.length; i++) {
       let item = this.allObjects[i];
+      if (item instanceof Attribute) {
+        attributes.push(item);
+        continue;
+      }
       if (item instanceof GeneralObject) {
         generalObjects.push(item);
         continue;
@@ -67,11 +81,17 @@ class FlowMap {
       if (item === this.focusedObj) continue;
       item.draw(false);
     }
+    for (let i = 0; i < attributes.length; i++) {
+      let item = attributes[i];
+      if (item === this.focusedAttribute) continue;
+      item.draw();
+    }
     for (let i = 0; i < generalObjects.length; i++) {
       let item = generalObjects[i];
       if (item === this.focusedObj) continue;
       item.draw(false);
     }
+    if (this.focusedAttribute !== undefined) this.focusedAttribute.draw();
     if (this.focusedObj !== undefined) this.focusedObj.draw(true);
   }
 
@@ -161,22 +181,47 @@ function mouseDown(e) {
     line.connectionFrom = map.focusedObj;
     map.addObject(line);
     map.focusedObj.addConnection(line);
-    map.focusedConn = line;
+    map.focusedConn = line; //--------END-CONNECTING--------------
+  } else if (
+    //---ADDING-ATTRIBUTES---------
+    map.focusedObj !== undefined &&
+    map.focusedObj instanceof GeneralObject &&
+    map.focusedObj.isAddingAttributes(mx, my)
+  ) {
+    map.eventStatus = 11;
+    var attribute = new Attribute(map.ctx, mx, my, map.focusedObj);
+    map.addObject(attribute);
+    map.focusedObj.addAttribute(attribute);
+    map.focusedAttribute = attribute;
+    map.draw();
+    updateAttributeBlock();
+    //---END-ADDING-ATTRIBUTES---------
   } else {
-    //--------END-CONNECTING--------------
     let focused = false;
     let connections = [];
+    map.focusedAttribute = undefined;
+
     for (let i = 0; i < map.allObjects.length; i++) {
       let item = map.allObjects[i];
       if (item instanceof Connection) {
         connections.push(item);
         continue;
       }
-      if (item.isClicking(mx, my)) {
+      if (!(item instanceof Attribute) && item.isClicking(mx, my)) {
         map.eventStatus = 1;
         map.focusedObj = item;
         focused = true;
         map.draw();
+        openProp();
+        break;
+      }
+      if (item instanceof Attribute && item.isClicking(mx, my)) {
+        map.eventStatus = 11;
+        map.focusedObj = item.parent;
+        map.focusedAttribute = item;
+        focused = true;
+        map.draw();
+        openProp();
         break;
       }
     }
@@ -194,6 +239,7 @@ function mouseDown(e) {
     }
     if (!focused) {
       map.focusedObj = undefined;
+      closeProp();
       map.draw();
     }
   }
@@ -276,6 +322,10 @@ function mouseMove(e) {
     map.focusedConn.hasMoved = true;
 
     map.focusedConn.move(dx, dy, mx, my);
+  } else if (map.eventStatus == 11) {
+    let dx = mx - map.startX;
+    let dy = my - map.startY;
+    map.focusedAttribute.move(dx, dy);
   }
 }
 
@@ -295,7 +345,10 @@ class GeneralObject {
     this.selectSquare = 8;
 
     this.fontSize = 12;
-    this.text = "First words";
+    this.textValue = ["First words"];
+
+    this.ctx.font = this.fontSize + "px Verdana";
+    this.textSize = Math.round(this.ctx.measureText(this.textValue[0]).width);
 
     this.snippetsMargin = 14;
 
@@ -303,32 +356,53 @@ class GeneralObject {
     this.connectionIcon = new Image();
     this.connectionIcon.src = "img/connicon.svg";
 
+    this.attributes = [];
+    this.attributesIcon = new Image();
+    this.attributesIcon.src = "img/attributesicon.svg";
+
     this.hovered = false;
   }
+
   set x(x) {
-    if (x == 0) return;
     let dx = x - this.xPos;
+    if (dx == 0) return;
     this.xPos = x;
     for (let i = 0; i < this.connections.length; i++)
       if (this == this.connections[i].connectionFrom)
         this.connections[i].x1 += dx;
       else this.connections[i].x2 += dx;
+    for (let i = 0; i < this.attributes.length; i++) {
+      this.attributes[i].x += dx;
+      this.attributes[i].connection.x1 += dx;
+    }
   }
   get x() {
     return this.xPos;
   }
 
   set y(y) {
-    if (y == 0) return;
     let dy = y - this.yPos;
+    if (dy == 0) return;
     this.yPos = y;
     for (let i = 0; i < this.connections.length; i++)
       if (this == this.connections[i].connectionFrom)
         this.connections[i].y1 += dy;
       else this.connections[i].y2 += dy;
+    for (let i = 0; i < this.attributes.length; i++) {
+      this.attributes[i].y += dy;
+      this.attributes[i].connection.y1 += dy;
+    }
   }
   get y() {
     return this.yPos;
+  }
+  set text(text) {
+    this.textValue = text;
+    this.textSize = Math.round(this.ctx.measureText(text[0]).width);
+  }
+
+  get text() {
+    return this.textValue;
   }
 
   addWidth(dw) {
@@ -454,6 +528,10 @@ class GeneralObject {
     this.connections.push(line);
   }
 
+  addAttribute(attribute) {
+    this.attributes.push(attribute);
+  }
+
   removeConnection(line) {
     for (let i = 0; i < this.connections.length; i++) {
       if (line === this.connections[i]) {
@@ -470,6 +548,12 @@ class GeneralObject {
     this.ctx.drawImage(this.connectionIcon, imgX, imgY);
   }
 
+  drawAttributesSnippet() {
+    let imgX = this.x + this.hW + this.snippetsMargin;
+    let imgY = this.y - this.attributesIcon.width / 2;
+    this.ctx.drawImage(this.attributesIcon, imgX, imgY);
+  }
+
   isConnecting(x, y) {
     return (
       x > this.x - this.connectionIcon.width / 2 &&
@@ -479,11 +563,26 @@ class GeneralObject {
     );
   }
 
+  isAddingAttributes(x, y) {
+    return (
+      x > this.x + this.hW + this.snippetsMargin &&
+      x < this.x + this.hW + this.snippetsMargin + this.attributesIcon.width &&
+      y > this.y - this.attributesIcon.height / 2 &&
+      y < this.y + this.attributesIcon.height / 2
+    );
+  }
+
   write() {
     this.ctx.font = this.fontSize + "px Verdana";
     this.ctx.fillStyle = "black";
     this.ctx.textAlign = "center";
-    this.ctx.fillText(this.text, this.x, this.y + this.fontSize / 2);
+    //this.ctx.fillText(this.text, this.x, this.y + this.fontSize / 2);
+
+    let yOffset = this.y - ((this.text.length - 1) / 2) * this.fontSize;
+    for (let i = 0; i < this.text.length; i++) {
+      this.ctx.fillText(this.text[i], this.x, yOffset + this.fontSize / 2);
+      yOffset += this.fontSize;
+    }
   }
 
   isClicking(x, y) {
@@ -551,7 +650,12 @@ class GeneralObject {
     this.ctx.closePath();
 
     this.drawSelectionSquares();
+    this.drawSnippets();
+  }
+
+  drawSnippets() {
     this.drawConnectionSnippet();
+    this.drawAttributesSnippet();
   }
 
   drawSelectionSquares() {
@@ -641,6 +745,43 @@ class Ellipse extends GeneralObject {
   }
 }
 
+class Romboid extends GeneralObject {
+  constructor(ctx, x, y, width, height) {
+    super(ctx, x, y, width, height);
+  }
+
+  draw(selected) {
+    this.ctx.beginPath();
+    this.ctx.globalCompositeOperation = "destination-out";
+    this.drawShape();
+    this.ctx.fill();
+    this.ctx.closePath();
+    this.ctx.globalCompositeOperation = "source-over";
+
+    this.ctx.beginPath();
+    this.drawShape();
+    this.ctx.strokeStyle = "#000000";
+    this.ctx.stroke();
+    this.ctx.closePath();
+
+    super.draw(selected);
+  }
+
+  drawShape() {
+    this.ctx.moveTo(this.x, this.y - this.hH);
+    this.ctx.lineTo(this.x + this.hW, this.y);
+    this.ctx.lineTo(this.x, this.y + this.hH);
+    this.ctx.lineTo(this.x - this.hW, this.y);
+    this.ctx.lineTo(this.x, this.y - this.hH);
+  }
+
+  isClicking(x, y) {
+    let result =
+      (x - this.x) ** 2 / this.hW ** 2 + (y - this.y) ** 2 / this.hH ** 2;
+    return result < 1;
+  }
+}
+
 class Rectangle extends GeneralObject {
   constructor(ctx, x, y, width, height) {
     super(ctx, x, y, width, height);
@@ -665,6 +806,104 @@ class Rectangle extends GeneralObject {
     this.ctx.closePath();
     super.draw(selected);
   }
+  isClicking(x, y) {
+    let result =
+      (x - this.x) ** 2 / this.hW ** 2 + (y - this.y) ** 2 / this.hH ** 2;
+    return result < 1;
+  }
+}
+
+class Attribute extends GeneralObject {
+  constructor(ctx, x, y, parent) {
+    super(ctx, x, y, 1, 1);
+    this.text = ["Attribute " + parent.attributes.length];
+    this.parent = parent;
+
+    this.connection = new Connection(
+      this.ctx,
+      parent.x,
+      parent.y,
+      this.x,
+      this.y
+    );
+  }
+
+  set x(x) {
+    let dx = x - this.xPos;
+    if (dx == 0) return;
+    this.xPos = x;
+    this.connection.x2 += dx;
+  }
+
+  get x() {
+    return this.xPos;
+  }
+
+  set y(y) {
+    let dy = y - this.yPos;
+    if (dy == 0) return;
+    this.yPos = y;
+    this.connection.y2 += dy;
+  }
+
+  get y() {
+    return this.yPos;
+  }
+  draw() {
+    this.connection.draw();
+    this.ctx.clearRect(
+      this.x - this.textSize / 2 - this.selectMargin,
+      this.y - this.fontSize / 2 - this.selectMargin,
+      this.textSize + this.selectMargin * 2,
+      this.fontSize + this.selectMargin * 2
+    );
+
+    if (this === map.focusedAttribute) {
+      super.draw(true);
+    } else {
+      super.draw(false);
+    }
+  }
+
+  isClicking(x, y) {
+    return (
+      x > this.x - this.textSize / 2 &&
+      x < this.x + this.textSize / 2 &&
+      y > this.y - this.fontSize / 2 &&
+      y < this.y + this.fontSize / 2
+    );
+  }
+
+  onSelect() {
+    this.ctx.beginPath();
+    this.ctx.strokeStyle = "gray";
+    this.ctx.rect(
+      this.x - this.textSize / 2 - this.selectMargin,
+      this.y - this.fontSize / 2 - this.selectMargin,
+      this.textSize + this.selectMargin * 2,
+      this.fontSize + this.selectMargin * 2
+    );
+    this.ctx.stroke();
+    this.ctx.closePath();
+  }
+
+  move(dx, dy) {
+    let newX = map.focusedAttribute.x + dx;
+    let newY = map.focusedAttribute.y + dy;
+
+    newX = Math.round(newX / map.grid) * map.grid;
+    newY = Math.round(newY / map.grid) * map.grid;
+
+    map.focusedAttribute.x = newX;
+    map.focusedAttribute.y = newY;
+
+    // redraw the scene with the new rect positions
+    map.draw();
+
+    // reset the starting mouse position for the next mousemove
+    map.startX = newX;
+    map.startY = newY;
+  }
 }
 
 class Connection {
@@ -675,7 +914,7 @@ class Connection {
     this.xp2 = x2;
     this.yp2 = y2;
 
-    this.radius = 10;
+    this.radius = 20;
 
     this.selectMargin = 4;
     this.selectSquare = 8;
@@ -922,8 +1161,6 @@ function createComponent(e) {
   mx = Math.round(mx / map.grid) * map.grid;
   my = Math.round(my / map.grid) * map.grid;
 
-  console.log(mx);
-
   if (mx < 0 || mx > map.WIDTH || my < 0 || my > map.HEIGHT) return;
 
   if (e.srcElement.alt === "rectangle") {
@@ -932,18 +1169,87 @@ function createComponent(e) {
   } else if (e.srcElement.alt === "ellipse") {
     var ellipse = new Ellipse(map.ctx, mx, my, 80, 40);
     map.addObject(ellipse);
+  } else if (e.srcElement.alt === "romboid") {
+    var romboid = new Romboid(map.ctx, mx, my, 80, 40);
+    map.addObject(romboid);
   }
   map.draw();
 }
 
 function showProprieties() {
-  document.getElementById("text").value = map.focusedObj.text;
+  if (map.focusedObj instanceof GeneralObject) {
+    let text = "";
+    for (i = 0; i < map.focusedObj.text.length - 1; i++) {
+      text += map.focusedObj.text[i] + "\n";
+    }
+    text += map.focusedObj.text[map.focusedObj.text.length - 1];
+
+    document.getElementById("text").value = text;
+    document.getElementById("fsSpan").textContent = map.focusedObj.fontSize;
+    document.getElementById("fsSlider").value = map.focusedObj.fontSize;
+
+    updateAttributeBlock();
+  }
+
   document.getElementById("proprieties-contnent").style.visibility = "visible";
 }
 
+function updateAttributeBlock() {
+  let attributeBlock = document.getElementById("attributes-element-block");
+  while (attributeBlock.firstChild) {
+    attributeBlock.removeChild(attributeBlock.firstChild);
+  }
+  for (let i = 0; i < map.focusedObj.attributes.length; i++) {
+    let attribute = document.createElement("div");
+
+    let accordion = document.createElement("div");
+    accordion.className = "accordion";
+
+    let button = document.createElement("IMG");
+    button.src = "img/chevron-up.svg";
+    let input = document.createElement("INPUT");
+    input.className = "attribute-name";
+    input.type = "text";
+    input.value = map.focusedObj.attributes[i].text;
+    input.spellcheck = false;
+
+    accordion.appendChild(button);
+    accordion.appendChild(input);
+
+    let panel = document.createElement("div");
+    panel.className = "panel";
+    panel.appendChild(document.createTextNode("Lorem ipsum..."));
+
+    button.addEventListener("click", function() {
+      if (panel.style.maxHeight) {
+        panel.style.maxHeight = null;
+        button.src = "img/chevron-up.svg";
+      } else {
+        panel.style.maxHeight = panel.scrollHeight + "px";
+        button.src = "img/chevron-down.svg";
+      }
+    });
+
+    input.addEventListener("change", function() {
+      map.focusedObj.attributes[i].text = [input.value];
+      map.draw();
+    });
+
+    attribute.appendChild(accordion);
+    attribute.appendChild(panel);
+
+    attributeBlock.appendChild(attribute);
+  }
+}
+
 function changeText() {
-  map.focusedObj.text = document.getElementById("text").value;
-  console.log(document.getElementById("text").value);
+  map.focusedObj.text = document.getElementById("text").value.split("\n");
+  map.draw();
+}
+
+function changeFontSize() {
+  map.focusedObj.fontSize = parseInt(document.getElementById("fsSlider").value);
+  document.getElementById("fsSpan").textContent = map.focusedObj.fontSize;
   map.draw();
 }
 
