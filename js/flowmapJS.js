@@ -217,8 +217,8 @@ function mouseDown(e) {
       }
       if (item instanceof Attribute && item.isClicking(mx, my)) {
         map.eventStatus = 11;
-        map.focusedObj = item.parent;
         map.focusedAttribute = item;
+        map.focusedObj = item.parent;
         focused = true;
         map.draw();
         openProp();
@@ -344,8 +344,8 @@ class GeneralObject {
     this.selectMargin = 4;
     this.selectSquare = 8;
 
-    this.fontSize = 12;
-    this.textValue = ["First words"];
+    this.fontSizeValue = 12;
+    this.textValue = ["Attributo 0"];
 
     this.ctx.font = this.fontSize + "px Verdana";
     this.textSize = Math.round(this.ctx.measureText(this.textValue[0]).width);
@@ -396,6 +396,7 @@ class GeneralObject {
   get y() {
     return this.yPos;
   }
+
   set text(text) {
     this.textValue = text;
     this.textSize = Math.round(this.ctx.measureText(text[0]).width);
@@ -403,6 +404,16 @@ class GeneralObject {
 
   get text() {
     return this.textValue;
+  }
+
+  set fontSize(fs) {
+    this.fontSizeValue = fs;
+    this.ctx.font = this.fontSize + "px Verdana";
+    this.textSize = Math.round(this.ctx.measureText(text[0]).width);
+  }
+
+  get fontSize() {
+    return this.fontSizeValue;
   }
 
   addWidth(dw) {
@@ -816,8 +827,6 @@ class Rectangle extends GeneralObject {
 class Attribute extends GeneralObject {
   constructor(ctx, x, y, parent) {
     super(ctx, x, y, 1, 1);
-    this.text = ["Attribute " + parent.attributes.length];
-    this.parent = parent;
 
     this.connection = new Connection(
       this.ctx,
@@ -826,6 +835,12 @@ class Attribute extends GeneralObject {
       this.x,
       this.y
     );
+
+    this.text = ["Attribute " + parent.attributes.length];
+    this.parent = parent;
+
+    this.anchorValue = 5;
+    this.anchorMargin = 10;
   }
 
   set x(x) {
@@ -849,14 +864,104 @@ class Attribute extends GeneralObject {
   get y() {
     return this.yPos;
   }
+
+  set anchor(a) {
+    this.anchorValue = a;
+    this.updateSnapPoint();
+  }
+
+  get anchor() {
+    return this.anchorValue;
+  }
+
+  set text(text) {
+    this.textValue = text;
+    this.textSize = Math.round(this.ctx.measureText(this.text[0]).width);
+    this.updateSnapPoint();
+  }
+
+  get text() {
+    return this.textValue;
+  }
+
+  set fontSize(fs) {
+    this.fontSizeValue = fs;
+    this.ctx.font = this.fontSize + "px Verdana";
+    this.textSize = Math.round(this.ctx.measureText(this.text[0]).width);
+    this.updateSnapPoint();
+  }
+
+  get fontSize() {
+    return this.fontSizeValue;
+  }
+
+  updateSnapPoint() {
+    let anchorPoint = this.getAnchorPoint();
+    this.connection.x2 = anchorPoint.x;
+    this.connection.y2 = anchorPoint.y;
+  }
+
+  getAnchorPoint() {
+    if (this.anchorValue === 1)
+      return {
+        x: this.x - this.anchorMargin - this.textSize / 2,
+        y: this.y - this.fontSize / 2 - this.anchorMargin
+      };
+    else if (this.anchorValue === 2)
+      return {
+        x: this.x,
+        y: this.y - this.fontSize / 2 - this.anchorMargin
+      };
+    else if (this.anchorValue === 3)
+      return {
+        x: this.x + this.anchorMargin + this.textSize / 2,
+        y: this.y - this.fontSize / 2 - this.anchorMargin
+      };
+    else if (this.anchorValue === 4)
+      return {
+        x: this.x - this.anchorMargin - this.textSize / 2,
+        y: this.y
+      };
+    else if (this.anchorValue === 6)
+      return {
+        x: this.x + this.anchorMargin + this.textSize / 2,
+        y: this.y
+      };
+    else if (this.anchorValue === 7)
+      return {
+        x: this.x - this.anchorMargin - this.textSize / 2,
+        y: this.y + this.fontSize / 2 + this.anchorMargin
+      };
+    else if (this.anchorValue === 8)
+      return {
+        x: this.x,
+        y: this.y + this.fontSize / 2 + this.anchorMargin
+      };
+    else if (this.anchorValue === 9)
+      return {
+        x: this.x + this.anchorMargin + this.textSize / 2,
+        y: this.y + this.fontSize / 2 + this.anchorMargin
+      };
+    else return { x: this.x, y: this.y };
+  }
+
   draw() {
     this.connection.draw();
+
     this.ctx.clearRect(
       this.x - this.textSize / 2 - this.selectMargin,
       this.y - this.fontSize / 2 - this.selectMargin,
       this.textSize + this.selectMargin * 2,
       this.fontSize + this.selectMargin * 2
     );
+
+    if (this.anchor != 5) {
+      this.ctx.beginPath();
+      let anchorPoint = this.getAnchorPoint();
+      this.ctx.arc(anchorPoint.x, anchorPoint.y, 5, 0, 2 * Math.PI);
+      this.ctx.fill();
+      this.ctx.closePath();
+    }
 
     if (this === map.focusedAttribute) {
       super.draw(true);
@@ -1200,6 +1305,8 @@ function updateAttributeBlock() {
     attributeBlock.removeChild(attributeBlock.firstChild);
   }
   for (let i = 0; i < map.focusedObj.attributes.length; i++) {
+    let attributeObj = map.focusedObj.attributes[i];
+
     let attribute = document.createElement("div");
 
     let accordion = document.createElement("div");
@@ -1210,15 +1317,11 @@ function updateAttributeBlock() {
     let input = document.createElement("INPUT");
     input.className = "attribute-name";
     input.type = "text";
-    input.value = map.focusedObj.attributes[i].text;
+    input.value = attributeObj.text;
     input.spellcheck = false;
 
     accordion.appendChild(button);
     accordion.appendChild(input);
-
-    let panel = document.createElement("div");
-    panel.className = "panel";
-    panel.appendChild(document.createTextNode("Lorem ipsum..."));
 
     button.addEventListener("click", function() {
       if (panel.style.maxHeight) {
@@ -1231,14 +1334,95 @@ function updateAttributeBlock() {
     });
 
     input.addEventListener("change", function() {
-      map.focusedObj.attributes[i].text = [input.value];
+      attributeObj.text = [input.value];
       map.draw();
     });
+
+    //Start Panel
+
+    let panel = document.createElement("div");
+    panel.className = "panel";
+
+    let fontDiv = document.createElement("div");
+    fontDiv.className = "attributePropBlock";
+
+    let fontSizeLabel = document.createElement("label");
+    fontSizeLabel.appendChild(document.createTextNode("Font Size"));
+
+    let fontSize = document.createElement("input");
+    fontSize.type = "range";
+    fontSize.min = 8;
+    fontSize.value = 14;
+    fontSize.max = 28;
+    fontSize.className = "smallSlider";
+
+    fontSize.addEventListener("change", function() {
+      attributeObj.fontSize = parseInt(fontSize.value);
+      map.draw();
+    });
+
+    fontDiv.appendChild(fontSizeLabel);
+    fontDiv.appendChild(fontSize);
+
+    panel.appendChild(fontDiv);
+
+    let anchorDiv = document.createElement("div");
+    anchorDiv.className = "attributePropBlock";
+
+    let anchorLabel = document.createElement("label");
+    anchorLabel.appendChild(document.createTextNode("Anchor"));
+    let anchorInput = document.createElement("div");
+    anchorInput.className = "anchor-input";
+
+    let anchorSnapList = [];
+    for (let a = 1; a <= 9; a++) {
+      let anchorSnap = document.createElement("img");
+      if (attributeObj.anchor !== a) {
+        anchorSnap.src = "img/anchorSnapUN.svg";
+        anchorSnap.activated = false;
+      } else {
+        anchorSnap.src = "img/anchorSnapSE.svg";
+        anchorSnap.activated = true;
+      }
+
+      anchorSnapList.push(anchorSnap);
+      anchorInput.appendChild(anchorSnap);
+    }
+
+    for (let a = 1; a <= 9; a++) {
+      let anchorSnap = anchorSnapList[a - 1];
+
+      anchorSnap.addEventListener("click", function() {
+        for (let f = 0; f < anchorSnapList.length; f++) {
+          anchorSnapList[f].src = "img/anchorSnapUN.svg";
+          anchorSnapList[f].activated = false;
+        }
+        anchorSnap.src = "img/anchorSnapSE.svg";
+        anchorSnap.activated = true;
+        attributeObj.anchor = a;
+
+        map.draw();
+      });
+    }
+
+    anchorDiv.appendChild(anchorLabel);
+    anchorDiv.appendChild(anchorInput);
+
+    panel.appendChild(anchorDiv);
+
+    //END PANEL
 
     attribute.appendChild(accordion);
     attribute.appendChild(panel);
 
     attributeBlock.appendChild(attribute);
+    if (
+      map.focusedAttribute !== undefined &&
+      attributeObj === map.focusedAttribute
+    ) {
+      panel.style.maxHeight = panel.scrollHeight + "px";
+      button.src = "img/chevron-down.svg";
+    }
   }
 }
 
