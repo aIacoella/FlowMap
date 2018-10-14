@@ -39,6 +39,16 @@ class FlowMap {
     this.focusObj = undefined;
     this.focusAtt = undefined;
     this.hoveredObj = undefined;
+
+    this.clickStateValue = 0;
+  }
+
+  set clickState(s) {
+    this.clickStateValue = s;
+  }
+
+  get clickState() {
+    return this.clickStateValue;
   }
 
   set focusedObj(focusedObj) {
@@ -132,6 +142,64 @@ class FlowMap {
     }
     return this.hoveredObj;
   }
+
+  deleteGeneralObject(obj) {
+    if (this.focusedObj === obj) {
+      this.focusedObj = undefined;
+      closeProp();
+    }
+    for (let i = 0; i < obj.attributes.length; i++) {
+      this.deleteAttribute(obj.attributes[i]);
+    }
+    for (let i = 0; i < obj.connections.length; i++) {
+      this.deleteConnection(obj.connections[i]);
+      i--;
+    }
+    for (let i = 0; i < map.allObjects.length; i++) {
+      if (map.allObjects[i] === obj) {
+        this.allObjects.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  deleteAttribute(obj) {
+    for (let i = 0; i < this.allObjects.length; i++) {
+      if (this.allObjects[i] === obj) {
+        this.allObjects.splice(i, 1);
+        break;
+      }
+    }
+    if (this.focusedAttribute === obj) this.focusedAttribute = undefined;
+  }
+
+  deleteConnection(obj) {
+    if (this.focusedObj === obj) {
+      this.focusedObj = undefined;
+    }
+    if (obj.connectionFrom !== undefined) {
+      for (let i = 0; i < obj.connectionFrom.connections.length; i++) {
+        if (obj.connectionFrom.connections[i] === obj) {
+          obj.connectionFrom.connections.splice(i, 1);
+          break;
+        }
+      }
+    }
+    if (obj.connectionTo !== undefined) {
+      for (let i = 0; i < obj.connectionTo.connections.length; i++) {
+        if (obj.connectionTo.connections[i] === obj) {
+          obj.connectionTo.connections.splice(i, 1);
+          break;
+        }
+      }
+    }
+    for (let i = 0; i < this.allObjects.length; i++) {
+      if (this.allObjects[i] === obj) {
+        this.allObjects.splice(i, 1);
+        continue;
+      }
+    }
+  }
 }
 
 const map = new FlowMap("flowMap");
@@ -144,6 +212,17 @@ function mouseDown(e) {
 
   const mx = parseInt(e.clientX - map.offsetX);
   const my = parseInt(e.clientY - map.offsetY);
+
+  if (map.clickState === 1) {
+    clearTimeout();
+    resetDoubleClick();
+    if (doubleClick(mx, my)) {
+      return;
+    }
+  } else {
+    map.clickState++;
+    setTimeout(resetDoubleClick, 500);
+  }
 
   map.eventStatus = 0;
 
@@ -183,6 +262,13 @@ function mouseDown(e) {
     map.focusedObj.addConnection(line);
     map.focusedConn = line; //--------END-CONNECTING--------------
   } else if (
+    map.focusedObj !== undefined &&
+    map.focusedObj instanceof GeneralObject &&
+    map.focusedObj.isDeleting(mx, my)
+  ) {
+    map.deleteGeneralObject(map.focusedObj);
+    map.draw();
+  } else if (
     //---ADDING-ATTRIBUTES---------
     map.focusedObj !== undefined &&
     map.focusedObj instanceof GeneralObject &&
@@ -196,6 +282,13 @@ function mouseDown(e) {
     map.draw();
     updateAttributeBlock();
     //---END-ADDING-ATTRIBUTES---------
+  } else if (
+    map.focusedObj !== undefined &&
+    map.focusedObj instanceof Connection &&
+    map.focusedObj.isDeleting(mx, my)
+  ) {
+    map.deleteConnection(map.focusedObj);
+    map.draw();
   } else {
     let focused = false;
     let connections = [];
@@ -233,6 +326,7 @@ function mouseDown(e) {
           map.focusedObj = item;
           focused = true;
           map.draw();
+          openProp();
           break;
         }
       }
@@ -322,12 +416,36 @@ function mouseMove(e) {
     map.focusedConn.hasMoved = true;
 
     map.focusedConn.move(dx, dy, mx, my);
-  } else if (map.eventStatus == 11) {
+  } else if (map.eventStatus === 11) {
     let dx = mx - map.startX;
     let dy = my - map.startY;
     map.focusedAttribute.move(dx, dy);
+  } else if (map.eventStatus === 12) {
+    let dx = mx - map.startX;
+    let dy = my - map.startY;
+
+    map.focusedObj.moveInterConn(dx, dy);
   }
 }
+
+function doubleClick(mx, my) {
+  if (map.focusedObj instanceof Connection) {
+    if (map.focusedObj.isClicking(mx, my)) {
+      console.log("double click on connection");
+      map.focusedObj.addInterConnection({ x: mx, y: my });
+      map.eventStatus = 12;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function resetDoubleClick() {
+  map.clickState = 0;
+}
+
+//-------------OBJECTS-------------
 
 class GeneralObject {
   constructor(ctx, x, y, width, height) {
@@ -350,7 +468,7 @@ class GeneralObject {
     this.ctx.font = this.fontSize + "px Verdana";
     this.textSize = Math.round(this.ctx.measureText(this.textValue[0]).width);
 
-    this.snippetsMargin = 14;
+    this.snippetsMargin = 20;
 
     this.connections = [];
     this.connectionIcon = new Image();
@@ -359,6 +477,9 @@ class GeneralObject {
     this.attributes = [];
     this.attributesIcon = new Image();
     this.attributesIcon.src = "img/attributesicon.svg";
+
+    this.deleteIcon = new Image();
+    this.deleteIcon.src = "img/deleteComponentIcon.svg";
 
     this.hovered = false;
   }
@@ -555,32 +676,61 @@ class GeneralObject {
 
   drawConnectionSnippet() {
     let imgX = this.x - this.connectionIcon.width / 2;
-    let imgY = this.y + this.hH + this.snippetsMargin;
+    let imgY =
+      this.y + this.hH + this.snippetsMargin - this.connectionIcon.height / 2;
     this.ctx.drawImage(this.connectionIcon, imgX, imgY);
   }
 
   drawAttributesSnippet() {
-    let imgX = this.x + this.hW + this.snippetsMargin;
+    let imgX =
+      this.x + this.hW + this.snippetsMargin - this.attributesIcon.width / 2;
     let imgY = this.y - this.attributesIcon.width / 2;
     this.ctx.drawImage(this.attributesIcon, imgX, imgY);
+  }
+
+  drawDeleteSnippet() {
+    let imgX = this.x - this.deleteIcon.width / 2;
+    let imgY =
+      this.y - this.hH - this.snippetsMargin - this.deleteIcon.height / 2;
+    this.ctx.drawImage(this.deleteIcon, imgX, imgY);
   }
 
   isConnecting(x, y) {
     return (
       x > this.x - this.connectionIcon.width / 2 &&
       x < this.x + this.connectionIcon.width / 2 &&
-      y > this.y + this.hH + this.snippetsMargin &&
-      y < this.y + this.hH + this.snippetsMargin + this.connectionIcon.height
+      y >
+        this.y +
+          this.hH +
+          this.snippetsMargin -
+          this.connectionIcon.height / 2 &&
+      y <
+        this.y + this.hH + this.snippetsMargin + this.connectionIcon.height / 2
     );
   }
 
   isAddingAttributes(x, y) {
     return (
-      x > this.x + this.hW + this.snippetsMargin &&
-      x < this.x + this.hW + this.snippetsMargin + this.attributesIcon.width &&
+      x >
+        this.x +
+          this.hW +
+          this.snippetsMargin -
+          this.attributesIcon.width / 2 &&
+      x <
+        this.x +
+          this.hW +
+          this.snippetsMargin +
+          this.attributesIcon.width / 2 &&
       y > this.y - this.attributesIcon.height / 2 &&
       y < this.y + this.attributesIcon.height / 2
     );
+  }
+
+  isDeleting(x, y) {
+    let imgX = this.x;
+    let imgY = this.y - this.hH - this.snippetsMargin;
+    let distance = Math.sqrt((x - imgX) ** 2 + (y - imgY) ** 2);
+    return distance < this.deleteIcon.height / 2;
   }
 
   write() {
@@ -667,6 +817,7 @@ class GeneralObject {
   drawSnippets() {
     this.drawConnectionSnippet();
     this.drawAttributesSnippet();
+    this.drawDeleteSnippet();
   }
 
   drawSelectionSquares() {
@@ -836,11 +987,15 @@ class Attribute extends GeneralObject {
       this.y
     );
 
+    this.connection.lineColor = "#111111";
+
     this.text = ["Attribute " + parent.attributes.length];
     this.parent = parent;
 
     this.anchorValue = 5;
     this.anchorMargin = 10;
+
+    this.circleType = 0;
   }
 
   set x(x) {
@@ -956,10 +1111,20 @@ class Attribute extends GeneralObject {
     );
 
     if (this.anchor != 5) {
-      this.ctx.beginPath();
       let anchorPoint = this.getAnchorPoint();
+
+      this.ctx.beginPath();
+      this.ctx.globalCompositeOperation = "destination-out";
       this.ctx.arc(anchorPoint.x, anchorPoint.y, 5, 0, 2 * Math.PI);
       this.ctx.fill();
+      this.ctx.closePath();
+      this.ctx.globalCompositeOperation = "source-over";
+
+      this.ctx.beginPath();
+      this.ctx.arc(anchorPoint.x, anchorPoint.y, 5, 0, 2 * Math.PI);
+      if (this.circleType === 1) this.ctx.fill();
+      else this.ctx.stroke();
+
       this.ctx.closePath();
     }
 
@@ -1019,7 +1184,7 @@ class Connection {
     this.xp2 = x2;
     this.yp2 = y2;
 
-    this.radius = 20;
+    this.radius = 10;
 
     this.selectMargin = 4;
     this.selectSquare = 8;
@@ -1029,31 +1194,43 @@ class Connection {
 
     this.possibleConnection = undefined;
 
+    this.dashedSetting = [2, 2];
+    this.lineType = 0;
+    this.lineColor = "#FF4136";
+
     this.nodeFocus = "P2";
-    this.updateSlope();
 
     this.hasMoved = true;
     this.firstConnection = true;
+
+    this.deleteIcon = new Image();
+    this.deleteIcon.src = "img/deleteComponentIcon.svg";
+
+    this.deleteIconX = undefined;
+    this.deleteIconY = undefined;
+
+    this.snippetsMargin = 20;
+    this.interConnections = [];
+
+    this.focusedIC = undefined;
+
+    
   }
 
   set x1(x) {
     this.xp1 = x;
-    this.updateSlope();
   }
 
   set x2(x) {
     this.xp2 = x;
-    this.updateSlope();
   }
 
   set y1(y) {
     this.yp1 = y;
-    this.updateSlope();
   }
 
   set y2(y) {
     this.yp2 = y;
-    this.updateSlope();
   }
 
   get x1() {
@@ -1067,6 +1244,20 @@ class Connection {
   }
   get y2() {
     return this.yp2;
+  }
+
+  addInterConnection(c) {
+    this.interConnections.splice(this.nodeFocus, 0, c);
+    this.focusedIC = c;
+  }
+
+  removeInterConnection(c) {
+    for (let i = 0; i < interConnections.length; i++) {
+      if (c === this.interConnections[i]) {
+        this.interConnections.splice(i, 1);
+        break;
+      }
+    }
   }
 
   move(dx, dy, mx, my) {
@@ -1111,8 +1302,22 @@ class Connection {
     }
 
     map.draw();
+  }
 
-    this.updateSlope();
+  moveInterConn(dx, dy) {
+    let newX = this.focusedIC.x + dx;
+    let newY = this.focusedIC.y + dy;
+
+    newX = Math.round(newX / map.grid) * map.grid;
+    newY = Math.round(newY / map.grid) * map.grid;
+
+    this.focusedIC.x = newX;
+    this.focusedIC.y = newY;
+
+    map.startX = newX;
+    map.startY = newY;
+
+    map.draw();
   }
 
   //returning [newConnection, oldConnecton]
@@ -1149,14 +1354,35 @@ class Connection {
     }
   }
 
+  getSlope(p1, p2) {
+    if (p2.x - p1.x !== 0) {
+      return { m: ((p1.y - p2.y) / (p1.x - p2.x)) * -1, vs: undefined };
+    } else {
+      if (p1.y < p2.y) return { m: undefined, vs: 1 };
+      else return { m: undefined, vs: -1 };
+    }
+  }
+
   draw(selected) {
     this.ctx.beginPath();
+
     this.ctx.moveTo(this.x1, this.y1);
+    for (let i = 0; i < this.interConnections.length; i++) {
+      this.ctx.lineTo(this.interConnections[i].x, this.interConnections[i].y);
+    }
     this.ctx.lineTo(this.x2, this.y2);
-    if (!this.hovered) this.ctx.strokeStyle = "#FF4136";
+
+    if (!this.hovered) this.ctx.strokeStyle = this.lineColor;
     else this.ctx.strokeStyle = "red";
+
+    if (this.lineType === 0) {
+      this.ctx.setLineDash([]);
+    } else {
+      this.ctx.setLineDash(this.dashedSetting);
+    }
     this.ctx.stroke();
     this.ctx.closePath();
+    this.ctx.setLineDash([]);
 
     if (
       (map.focusedObj !== undefined || map.focusedConn !== undefined) &&
@@ -1180,29 +1406,39 @@ class Connection {
   isClicking(x, y) {
     let occurrence = 10;
 
-    if (this.m === undefined) {
-      let distance = this.getDistance([this.x1, this.y1], [this.x2, this.y2]);
-      for (let i = 0; i < distance; i += occurrence) {
-        let center = [this.x1, this.y1 + i * this.verticalStack];
-        if (this.getDistance(center, [x, y]) < this.radius) {
-          this.nodeFocus = "DRAG";
-          return true;
+    let allPoints = [{ x: this.x1, y: this.y1 }].concat(
+      this.interConnections.concat({ x: this.x2, y: this.y2 })
+    );
+    for (let f = 0; f < allPoints.length - 1; f++) {
+      let p1 = allPoints[f];
+      let p2 = allPoints[f + 1];
+      let slope = this.getSlope(p1, p2);
+      let m = slope.m;
+      let vs = slope.vs;
+
+      if (m === undefined) {
+        let distance = this.getDistance([p1.x, p1.y], [p2.x, p2.y]);
+        for (let i = 0; i < distance; i += occurrence) {
+          let center = [p1.x, p1.y + i * vs];
+          if (this.getDistance(center, [x, y]) < this.radius) {
+            this.nodeFocus = f;
+            return true;
+          }
         }
-      }
-    } else {
-      let theta = Math.atan(this.m);
-      let xDistance = Math.abs(this.x2 - this.x1);
-      occurrence = occurrence * Math.cos(theta);
-      let sign = this.x1 > this.x2 ? 1 : -1;
+      } else {
+        let theta = Math.atan(m);
+        let xDistance = Math.abs(p2.x - p1.x);
+        occurrence = occurrence * Math.cos(theta);
+        let sign = p1.x > p2.x ? 1 : -1;
+        for (let i = 0; i < xDistance; i += occurrence) {
+          let centerX = Math.round(p1.x + i * sign * -1);
+          let centerY = Math.round(p1.y + m * i * sign);
+          let center = [centerX, centerY];
 
-      for (let i = 0; i < xDistance; i += occurrence) {
-        let centerX = Math.round(this.x1 + i * sign * -1);
-        let centerY = Math.round(this.y1 + this.m * i * sign);
-        let center = [centerX, centerY];
-
-        if (this.getDistance(center, [x, y]) < this.radius) {
-          this.nodeFocus = "DRAG";
-          return true;
+          if (this.getDistance(center, [x, y]) < this.radius) {
+            this.nodeFocus = f;
+            return true;
+          }
         }
       }
     }
@@ -1223,12 +1459,48 @@ class Connection {
     return -1;
   }
 
+  isDeleting(x, y) {
+    if (this.deleteIconX === undefined || this.deleteIconY === undefined)
+      return false;
+    return (
+      this.getDistance([x, y], [this.deleteIconX, this.deleteIconY]) <
+      this.deleteIcon.width / 2
+    );
+  }
+
   onSelect() {
     this.ctx.beginPath();
     this.ctx.strokeStyle = "gray";
     this.ctx.rect(this.x1, this.y1, this.x2 - this.x1, this.y2 - this.y1);
+    this.ctx.setLineDash([2, 2]);
     this.ctx.stroke();
     this.ctx.closePath();
+    this.ctx.setLineDash([]);
+
+    this.drawDeleteSnippet();
+  }
+
+  drawDeleteSnippet() {
+    let width = Math.abs(this.x2 - this.x1);
+    let height = Math.abs(this.y2 - this.y1);
+    if (width >= height) {
+      var imgX = this.x1 + (this.x2 - this.x1) / 2 - this.deleteIcon.width / 2;
+      var imgY =
+        Math.min(this.y1, this.y2) -
+        this.snippetsMargin -
+        this.deleteIcon.height / 2;
+    } else {
+      var imgX =
+        Math.max(this.x1, this.x2) +
+        this.snippetsMargin -
+        this.deleteIcon.width / 2;
+      var imgY = this.y1 + (this.y2 - this.y1) / 2 - this.deleteIcon.height / 2;
+    }
+
+    this.deleteIconX = imgX + this.deleteIcon.width / 2;
+    this.deleteIconY = imgY + this.deleteIcon.height / 2;
+
+    this.ctx.drawImage(this.deleteIcon, imgX, imgY);
   }
 
   getDistance(p1, p2) {
@@ -1282,6 +1554,10 @@ function createComponent(e) {
 }
 
 function showProprieties() {
+  let proprietiesContnent = document.getElementById("proprieties-contnent");
+  while (proprietiesContnent.firstChild) {
+    proprietiesContnent.removeChild(proprietiesContnent.firstChild);
+  }
   if (map.focusedObj instanceof GeneralObject) {
     let text = "";
     for (i = 0; i < map.focusedObj.text.length - 1; i++) {
@@ -1289,11 +1565,34 @@ function showProprieties() {
     }
     text += map.focusedObj.text[map.focusedObj.text.length - 1];
 
+    let textDiv = document.createElement("div");
+    textDiv.className = "proprieties-element-block";
+
+    textDiv.innerHTML =
+      "<label>Text </label>" +
+      '<textarea name="text" id="text" rows="3" onchange="changeText()"></textarea>';
+
+    let fontDiv = document.createElement("div");
+    fontDiv.className = "proprieties-element-block";
+
+    fontDiv.innerHTML =
+      '<label>Font Size <span id="fsSpan"></span></label>' +
+      '<input type="range" min="8" max="28" class="slider" id="fsSlider" onchange="changeFontSize()">';
+
+    let attributeDiv = document.createElement("div");
+    attributeDiv.className = "proprieties-element-block";
+    attributeDiv.id = "attributes-element-block";
+
+    proprietiesContnent.appendChild(textDiv);
+    proprietiesContnent.appendChild(fontDiv);
+    proprietiesContnent.appendChild(attributeDiv);
+
     document.getElementById("text").value = text;
     document.getElementById("fsSpan").textContent = map.focusedObj.fontSize;
     document.getElementById("fsSlider").value = map.focusedObj.fontSize;
 
     updateAttributeBlock();
+  } else {
   }
 
   document.getElementById("proprieties-contnent").style.visibility = "visible";
@@ -1367,7 +1666,7 @@ function updateAttributeBlock() {
     panel.appendChild(fontDiv);
 
     let anchorDiv = document.createElement("div");
-    anchorDiv.className = "attributePropBlock";
+    anchorDiv.className = "anchor-type-div";
 
     let anchorLabel = document.createElement("label");
     anchorLabel.appendChild(document.createTextNode("Anchor"));
@@ -1407,6 +1706,32 @@ function updateAttributeBlock() {
 
     anchorDiv.appendChild(anchorLabel);
     anchorDiv.appendChild(anchorInput);
+
+    let circleTypeLabel = document.createElement("label");
+    circleTypeLabel.appendChild(document.createTextNode("Circle"));
+    circleTypeLabel.style = "text-align: center;";
+
+    let circleType = document.createElement("img");
+    circleType.src = "img/circle-stroke.svg";
+    circleType.alt = "circleStroke";
+    circleType.className = "circle-type";
+
+    circleType.addEventListener("click", function() {
+      console.log("changing");
+      if (circleType.alt === "circleStroke") {
+        circleType.src = "img/circle-filled.svg";
+        circleType.alt = "circleFilled";
+        attributeObj.circleType = 1;
+      } else {
+        circleType.src = "img/circle-stroke.svg";
+        circleType.alt = "circleStroke";
+        attributeObj.circleType = 0;
+      }
+      map.draw();
+    });
+
+    anchorDiv.appendChild(circleTypeLabel);
+    anchorDiv.appendChild(circleType);
 
     panel.appendChild(anchorDiv);
 

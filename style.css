@@ -226,11 +226,20 @@ body {
 }
 
 .attributePropBlock {
-  display: block;
   margin: 10px 0;
 }
 
+.anchor-type-div {
+  display: grid;
+  margin: 10px 0;
+  grid-template-columns: auto 40px;
+  grid-template-rows: auto 40px;
+}
+
 .anchor-input {
+  grid-column: 1;
+  grid-row: 2;
+
   width: 120px;
   height: 45px;
   background-image: url("img/anchorRect.svg");
@@ -244,4 +253,19 @@ body {
 
 .anchor-input img:hover {
   cursor: pointer;
+}
+
+.circle-type {
+  grid-column: 2;
+  grid-row: 2;
+  cursor: pointer;
+  margin: auto;
+  width: 25px;
+  height: 25px;
+  transition: 0.2s;
+}
+
+.circle-type:hover {
+  width: 30px;
+  height: 30px;
 }
