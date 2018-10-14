@@ -346,7 +346,11 @@ function mouseUp(e) {
   e.preventDefault();
   e.stopPropagation();
 
-  if (map.eventStatus === 10 && map.focusedConn.hasMoved) {
+  if (
+    map.eventStatus === 10 &&
+    map.focusedConn.isExtremety() &&
+    map.focusedConn.hasMoved
+  ) {
     let componentConnection = map.focusedConn.connect();
     //remove old Connection
     if (componentConnection.oldConnection !== undefined) {
@@ -392,9 +396,7 @@ function mouseMove(e) {
     let dx = mx - map.startX;
     let dy = my - map.startY;
 
-    if (map.focusedObj instanceof Connection) {
-      map.focusedObj.move(dx, dy);
-    } else if (map.focusedObj instanceof GeneralObject) {
+    if (map.focusedObj instanceof GeneralObject) {
       map.focusedObj.move(dx, dy);
     }
   } else if (map.eventStatus >= 2 && map.eventStatus <= 9) {
@@ -424,7 +426,7 @@ function mouseMove(e) {
     let dx = mx - map.startX;
     let dy = my - map.startY;
 
-    map.focusedObj.moveInterConn(dx, dy);
+    map.focusedObj.move(dx, dy);
   }
 }
 
@@ -432,8 +434,10 @@ function doubleClick(mx, my) {
   if (map.focusedObj instanceof Connection) {
     if (map.focusedObj.isClicking(mx, my)) {
       console.log("double click on connection");
-      map.focusedObj.addInterConnection({ x: mx, y: my });
-      map.eventStatus = 12;
+      map.focusedObj.addNode({ x: mx, y: my });
+      map.focusedConn = map.focusedObj;
+      map.eventStatus = 10;
+      map.draw();
       return true;
     }
   }
@@ -490,11 +494,11 @@ class GeneralObject {
     this.xPos = x;
     for (let i = 0; i < this.connections.length; i++)
       if (this == this.connections[i].connectionFrom)
-        this.connections[i].x1 += dx;
-      else this.connections[i].x2 += dx;
+        this.connections[i].getPI().x += dx;
+      else this.connections[i].getPF().x += dx;
     for (let i = 0; i < this.attributes.length; i++) {
       this.attributes[i].x += dx;
-      this.attributes[i].connection.x1 += dx;
+      this.attributes[i].connection.getPI().x += dx;
     }
   }
   get x() {
@@ -507,11 +511,11 @@ class GeneralObject {
     this.yPos = y;
     for (let i = 0; i < this.connections.length; i++)
       if (this == this.connections[i].connectionFrom)
-        this.connections[i].y1 += dy;
-      else this.connections[i].y2 += dy;
+        this.connections[i].getPI().y += dy;
+      else this.connections[i].getPF().y += dy;
     for (let i = 0; i < this.attributes.length; i++) {
       this.attributes[i].y += dy;
-      this.attributes[i].connection.y1 += dy;
+      this.attributes[i].connection.getPI().y += dy;
     }
   }
   get y() {
@@ -1002,7 +1006,7 @@ class Attribute extends GeneralObject {
     let dx = x - this.xPos;
     if (dx == 0) return;
     this.xPos = x;
-    this.connection.x2 += dx;
+    this.connection.getPF().x += dx;
   }
 
   get x() {
@@ -1013,7 +1017,7 @@ class Attribute extends GeneralObject {
     let dy = y - this.yPos;
     if (dy == 0) return;
     this.yPos = y;
-    this.connection.y2 += dy;
+    this.connection.getPF().y += dy;
   }
 
   get y() {
@@ -1052,8 +1056,8 @@ class Attribute extends GeneralObject {
 
   updateSnapPoint() {
     let anchorPoint = this.getAnchorPoint();
-    this.connection.x2 = anchorPoint.x;
-    this.connection.y2 = anchorPoint.y;
+    this.connection.getPF().x = anchorPoint.x;
+    this.connection.getPF().y = anchorPoint.y;
   }
 
   getAnchorPoint() {
@@ -1179,10 +1183,7 @@ class Attribute extends GeneralObject {
 class Connection {
   constructor(ctx, x1, y1, x2, y2) {
     this.ctx = ctx;
-    this.xp1 = x1;
-    this.yp1 = y1;
-    this.xp2 = x2;
-    this.yp2 = y2;
+    this.nodes = [{ x: x1, y: y1 }, { x: x2, y: y2 }];
 
     this.radius = 10;
 
@@ -1198,7 +1199,7 @@ class Connection {
     this.lineType = 0;
     this.lineColor = "#FF4136";
 
-    this.nodeFocus = "P2";
+    this.nodeFocus = this.nodes.length - 1;
 
     this.hasMoved = true;
     this.firstConnection = true;
@@ -1210,109 +1211,42 @@ class Connection {
     this.deleteIconY = undefined;
 
     this.snippetsMargin = 20;
-    this.interConnections = [];
-
-    this.focusedIC = undefined;
-
-    
   }
 
-  set x1(x) {
-    this.xp1 = x;
+  addNode(node) {
+    this.nodeFocus++;
+    this.nodes.splice(this.nodeFocus, 0, node);
   }
 
-  set x2(x) {
-    this.xp2 = x;
-  }
-
-  set y1(y) {
-    this.yp1 = y;
-  }
-
-  set y2(y) {
-    this.yp2 = y;
-  }
-
-  get x1() {
-    return this.xp1;
-  }
-  get x2() {
-    return this.xp2;
-  }
-  get y1() {
-    return this.yp1;
-  }
-  get y2() {
-    return this.yp2;
-  }
-
-  addInterConnection(c) {
-    this.interConnections.splice(this.nodeFocus, 0, c);
-    this.focusedIC = c;
-  }
-
-  removeInterConnection(c) {
-    for (let i = 0; i < interConnections.length; i++) {
-      if (c === this.interConnections[i]) {
-        this.interConnections.splice(i, 1);
-        break;
+  removeNode(node) {
+    for (let i = 0; i < this.nodes.length; i++) {
+      if (node === this.nodes[i]) {
+        this.nodes.splice(i, 1);
+        return;
       }
     }
   }
 
   move(dx, dy, mx, my) {
-    if (this.nodeFocus === "P1") {
-      let newX = this.x1 + dx;
-      let newY = this.y1 + dy;
+    let node = this.nodes[this.nodeFocus];
 
-      newX = Math.round(newX / map.grid) * map.grid;
-      newY = Math.round(newY / map.grid) * map.grid;
-
-      this.x1 = newX;
-      this.y1 = newY;
-
-      let item = map.isHovering(mx, my);
-      if (item !== null) {
-        this.possibleConnection = item;
-      } else {
-        this.possibleConnection = undefined;
-      }
-
-      map.startX = newX;
-      map.startY = newY;
-    } else if (this.nodeFocus === "P2") {
-      let newX = this.x2 + dx;
-      let newY = this.y2 + dy;
-
-      newX = Math.round(newX / map.grid) * map.grid;
-      newY = Math.round(newY / map.grid) * map.grid;
-
-      this.x2 = newX;
-      this.y2 = newY;
-
-      let item = map.isHovering(mx, my);
-      if (item !== null) {
-        this.possibleConnection = item;
-      } else {
-        this.possibleConnection = undefined;
-      }
-
-      map.startX = newX;
-      map.startY = newY;
-    }
-
-    map.draw();
-  }
-
-  moveInterConn(dx, dy) {
-    let newX = this.focusedIC.x + dx;
-    let newY = this.focusedIC.y + dy;
+    let newX = node.x + dx;
+    let newY = node.y + dy;
 
     newX = Math.round(newX / map.grid) * map.grid;
     newY = Math.round(newY / map.grid) * map.grid;
 
-    this.focusedIC.x = newX;
-    this.focusedIC.y = newY;
+    node.x = newX;
+    node.y = newY;
+
+    if (this.nodeFocus === 0 || this.nodeFocus === this.nodes.length - 1) {
+      let item = map.isHovering(mx, my);
+      if (item !== null) {
+        this.possibleConnection = item;
+      } else {
+        this.possibleConnection = undefined;
+      }
+    }
 
     map.startX = newX;
     map.startY = newY;
@@ -1322,7 +1256,7 @@ class Connection {
 
   //returning [newConnection, oldConnecton]
   connect() {
-    if (this.nodeFocus === "P1") {
+    if (this.nodeFocus === 0) {
       //connecting from
       let oldConnection = this.connectionFrom;
       this.connectionFrom = this.possibleConnection;
@@ -1330,27 +1264,17 @@ class Connection {
         newConnection: this.connectionFrom,
         oldConnection: oldConnection
       };
-    } else {
+    } else if (this.nodeFocus === this.nodes.length - 1) {
       //connecting to
 
       let oldConnection = this.connectionTo;
       this.connectionTo = this.possibleConnection;
       if (this.connectionTo !== undefined && this.firstConnection) {
-        this.x2 = this.connectionTo.x;
-        this.y2 = this.connectionTo.y;
+        this.getPF().x = this.connectionTo.x;
+        this.getPF().y = this.connectionTo.y;
         this.firstConnection = false;
       }
       return { newConnection: this.connectionTo, oldConnection: oldConnection };
-    }
-  }
-
-  updateSlope() {
-    if (this.x2 - this.x1 !== 0) {
-      this.m = ((this.y1 - this.y2) / (this.x1 - this.x2)) * -1;
-    } else {
-      this.m = undefined;
-      if (this.y1 < this.y2) this.verticalStack = 1;
-      else this.verticalStack = -1;
     }
   }
 
@@ -1366,52 +1290,50 @@ class Connection {
   draw(selected) {
     this.ctx.beginPath();
 
-    this.ctx.moveTo(this.x1, this.y1);
-    for (let i = 0; i < this.interConnections.length; i++) {
-      this.ctx.lineTo(this.interConnections[i].x, this.interConnections[i].y);
+    this.ctx.moveTo(this.getPI().x, this.getPI().y);
+    for (let i = 1; i < this.nodes.length; i++) {
+      this.ctx.lineTo(this.nodes[i].x, this.nodes[i].y);
     }
-    this.ctx.lineTo(this.x2, this.y2);
 
-    if (!this.hovered) this.ctx.strokeStyle = this.lineColor;
-    else this.ctx.strokeStyle = "red";
+    this.ctx.strokeStyle = this.lineColor;
 
     if (this.lineType === 0) {
       this.ctx.setLineDash([]);
     } else {
       this.ctx.setLineDash(this.dashedSetting);
     }
+
     this.ctx.stroke();
     this.ctx.closePath();
     this.ctx.setLineDash([]);
 
-    if (
-      (map.focusedObj !== undefined || map.focusedConn !== undefined) &&
-      (map.focusedObj === this || map.focusedConn === this)
-    ) {
+    if (selected) {
       this.ctx.beginPath();
-      this.ctx.ellipse(this.x1, this.y1, 5, 5, 0, 0, 2 * Math.PI);
-      this.ctx.fillStyle = "#001F3F";
-      this.ctx.fill();
-
-      this.ctx.beginPath();
-      this.ctx.ellipse(this.x2, this.y2, 5, 5, 0, 0, 2 * Math.PI);
-      this.ctx.fillStyle = "#001F3F";
-      this.ctx.fill();
+      for (let i = 0; i < this.nodes.length; i++) {
+        this.ctx.beginPath();
+        this.ctx.ellipse(
+          this.nodes[i].x,
+          this.nodes[i].y,
+          5,
+          5,
+          0,
+          0,
+          2 * Math.PI
+        );
+        this.ctx.fillStyle = "#001F3F";
+        this.ctx.fill();
+        this.ctx.closePath();
+      }
+      this.onSelect();
     }
-
-    this.ctx.closePath();
-    selected ? this.onSelect() : null;
   }
 
   isClicking(x, y) {
     let occurrence = 10;
 
-    let allPoints = [{ x: this.x1, y: this.y1 }].concat(
-      this.interConnections.concat({ x: this.x2, y: this.y2 })
-    );
-    for (let f = 0; f < allPoints.length - 1; f++) {
-      let p1 = allPoints[f];
-      let p2 = allPoints[f + 1];
+    for (let f = 0; f < this.nodes.length - 1; f++) {
+      let p1 = this.nodes[f];
+      let p2 = this.nodes[f + 1];
       let slope = this.getSlope(p1, p2);
       let m = slope.m;
       let vs = slope.vs;
@@ -1422,6 +1344,7 @@ class Connection {
           let center = [p1.x, p1.y + i * vs];
           if (this.getDistance(center, [x, y]) < this.radius) {
             this.nodeFocus = f;
+            console.log("node focus = " + this.nodeFocus);
             return true;
           }
         }
@@ -1437,6 +1360,7 @@ class Connection {
 
           if (this.getDistance(center, [x, y]) < this.radius) {
             this.nodeFocus = f;
+            console.log("node focus = " + this.nodeFocus);
             return true;
           }
         }
@@ -1446,14 +1370,17 @@ class Connection {
     return false;
   }
 
+  isExtremety() {
+    return this.nodeFocus === 0 || this.nodeFocus === this.nodes.length - 1;
+  }
+
   isResizing(x, y) {
-    if (this.getDistance([this.x1, this.y1], [x, y]) < this.radius) {
-      this.nodeFocus = "P1";
-      return 1;
-    }
-    if (this.getDistance([this.x2, this.y2], [x, y]) < this.radius) {
-      this.nodeFocus = "P2";
-      return 2;
+    for (let i = 0; i < this.nodes.length; i++) {
+      let node = this.nodes[i];
+      if (this.getDistance([node.x, node.y], [x, y]) < this.radius) {
+        this.nodeFocus = i;
+        return i;
+      }
     }
 
     return -1;
@@ -1471,7 +1398,12 @@ class Connection {
   onSelect() {
     this.ctx.beginPath();
     this.ctx.strokeStyle = "gray";
-    this.ctx.rect(this.x1, this.y1, this.x2 - this.x1, this.y2 - this.y1);
+    this.ctx.rect(
+      this.nodes[0].x,
+      this.nodes[0].y,
+      this.nodes[this.nodes.length - 1].x - this.nodes[0].x,
+      this.nodes[this.nodes.length - 1].y - this.nodes[0].y
+    );
     this.ctx.setLineDash([2, 2]);
     this.ctx.stroke();
     this.ctx.closePath();
@@ -1480,21 +1412,28 @@ class Connection {
     this.drawDeleteSnippet();
   }
 
+  getPI() {
+    return this.nodes[0];
+  }
+
+  getPF() {
+    return this.nodes[this.nodes.length - 1];
+  }
+
   drawDeleteSnippet() {
-    let width = Math.abs(this.x2 - this.x1);
-    let height = Math.abs(this.y2 - this.y1);
+    let pi = this.getPI();
+    let pf = this.getPF();
+
+    let width = Math.abs(pf.x - pi.x);
+    let height = Math.abs(pf.y - pi.y);
     if (width >= height) {
-      var imgX = this.x1 + (this.x2 - this.x1) / 2 - this.deleteIcon.width / 2;
+      var imgX = pi.x + (pf.x - pi.x) / 2 - this.deleteIcon.width / 2;
       var imgY =
-        Math.min(this.y1, this.y2) -
-        this.snippetsMargin -
-        this.deleteIcon.height / 2;
+        Math.min(pi.y, pf.y) - this.snippetsMargin - this.deleteIcon.height / 2;
     } else {
       var imgX =
-        Math.max(this.x1, this.x2) +
-        this.snippetsMargin -
-        this.deleteIcon.width / 2;
-      var imgY = this.y1 + (this.y2 - this.y1) / 2 - this.deleteIcon.height / 2;
+        Math.max(pi.x, pf.x) + this.snippetsMargin - this.deleteIcon.width / 2;
+      var imgY = pi.y + (pf.y - pi.y) / 2 - this.deleteIcon.height / 2;
     }
 
     this.deleteIconX = imgX + this.deleteIcon.width / 2;
